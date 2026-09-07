@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package banking.account;
+
+option java_multiple_files = true;
+option java_package = "com.windlabs.banking.grpc.account";
+option java_outer_classname = "AccountProto";
+
+service AccountGrpcService {
+
+    rpc GetAccount(GetAccountRequest)
+        returns (GetAccountResponse);
+
+    rpc ValidateOwnership(ValidateOwnershipRequest)
+        returns (ValidateOwnershipResponse);
+
+}
+
+message GetAccountRequest {
+    string account_number = 1;
+}
+
+message GetAccountResponse {
+    string account_number = 1;
+    string customer_id = 2;
+    string currency = 3;
+    string status = 4;
+}
+
+message ValidateOwnershipRequest {
+    string customer_id = 1;
+    string account_number = 2;
+}
+
+message ValidateOwnershipResponse {
+    bool valid = 1;
+}
