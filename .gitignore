@@ -35,3 +35,6 @@ docker/data/
 *.key
 *.p12
 *.jks
+
+local-secrets/
+**/local-secrets/
