@@ -27,7 +27,8 @@
         <module>common-proto</module>
         <module>account-service</module>
         <module>auth-service</module>
-        <!-- <module>api-gateway</module>
+        <module>api-gateway</module>
+        <!-- 
         <module>transaction-service</module>
         <module>audit-service</module> -->
     </modules>
