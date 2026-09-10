@@ -14,6 +14,8 @@ service AccountGrpcService {
     rpc ValidateOwnership(ValidateOwnershipRequest)
         returns (ValidateOwnershipResponse);
 
+    rpc ExecuteTransfer(ExecuteTransferRequest)
+        returns (ExecuteTransferResponse);
 }
 
 message GetAccountRequest {
@@ -34,4 +36,33 @@ message ValidateOwnershipRequest {
 
 message ValidateOwnershipResponse {
     bool valid = 1;
+}
+
+message ExecuteTransferRequest {
+    string customer_id = 1;
+    string idempotency_key = 2;
+
+    string source_account_number = 3;
+    string destination_account_number = 4;
+
+    // Decimal dikirim sebagai string agar tidak kehilangan precision.
+    string amount = 5;
+    string currency = 6;
+}
+
+message ExecuteTransferResponse {
+    string transfer_id = 1;
+
+    string source_account_number = 2;
+    string destination_account_number = 3;
+
+    string amount = 4;
+    string currency = 5;
+
+    string source_balance_after = 6;
+    string destination_balance_after = 7;
+
+    string processed_on = 8;
+
+    bool replayed = 9;
 }

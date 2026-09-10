@@ -28,8 +28,9 @@
         <module>account-service</module>
         <module>auth-service</module>
         <module>api-gateway</module>
-        <!-- 
         <module>transaction-service</module>
+        <!-- 
+        
         <module>audit-service</module> -->
     </modules>
 
@@ -54,6 +55,13 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${grpc.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
