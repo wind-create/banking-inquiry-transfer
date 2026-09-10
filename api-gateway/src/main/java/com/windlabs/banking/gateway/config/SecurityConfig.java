@@ -30,6 +30,12 @@ public class SecurityConfig {
                                 "/api/v1/accounts/**"
                         ).hasAuthority("SCOPE_account.read")
 
+                        .pathMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/transfers",
+                                "/api/v1/transfers/**"
+                        ).hasAuthority("SCOPE_transfer.write")
+
                         .anyExchange().denyAll()
                 )
 
