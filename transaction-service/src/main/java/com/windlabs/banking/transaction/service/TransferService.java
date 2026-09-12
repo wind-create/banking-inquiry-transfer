@@ -12,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -20,6 +22,11 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class TransferService {
+
+    private static final Logger log =
+        LoggerFactory.getLogger(
+                TransferService.class
+        );
 
     private final AccountGrpcServiceGrpc
             .AccountGrpcServiceBlockingStub accountStub;
@@ -119,6 +126,19 @@ public class TransferService {
             return prepared.completedResponse();
         }
 
+        log.atInfo()
+            .addKeyValue(
+                    "customerId",
+                    customerId
+            )
+            .addKeyValue(
+                    "idempotencyKey",
+                    idempotencyKey
+            )
+            .log(
+                    "Calling account service for transfer"
+            );
+
         ExecuteTransferRequest grpcRequest =
                 ExecuteTransferRequest.newBuilder()
                         .setCustomerId(customerId)
@@ -150,12 +170,33 @@ public class TransferService {
                             prepared.requestId(),
                             grpcResponse
                     );
-
+                
             cacheService.invalidate(
                     request.sourceAccountNumber(),
                     request.destinationAccountNumber()
             );
 
+            log.atInfo()
+                    .addKeyValue(
+                            "customerId",
+                            customerId
+                    )
+                    .addKeyValue(
+                            "transferId",
+                            response.transferId()
+                    )
+                    .addKeyValue(
+                            "status",
+                            response.status()
+                    )
+                    .addKeyValue(
+                            "replayed",
+                            response.replayed()
+                    )
+                    .log(
+                            "Transfer completed successfully"
+                    );
+                
             return response;
 
         } catch (StatusRuntimeException ex) {
@@ -175,6 +216,23 @@ public class TransferService {
                         message
                 );
 
+                log.atWarn()
+                    .addKeyValue(
+                            "customerId",
+                            customerId
+                    )
+                    .addKeyValue(
+                            "idempotencyKey",
+                            idempotencyKey
+                    )
+                    .addKeyValue(
+                            "grpcStatus",
+                            code.name()
+                    )
+                    .log(
+                            "Transfer failed"
+                    );
+
                 throw mapBusinessException(code, message);
             }
 
@@ -188,6 +246,23 @@ public class TransferService {
                     code.name(),
                     message
             );
+
+            log.atError()
+                .addKeyValue(
+                        "customerId",
+                        customerId
+                )
+                .addKeyValue(
+                        "idempotencyKey",
+                        idempotencyKey
+                )
+                .addKeyValue(
+                        "grpcStatus",
+                        code.name()
+                )
+                .log(
+                        "Transfer outcome unknown"
+                );
 
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,

@@ -1,6 +1,7 @@
 package com.windlabs.banking.account.grpc;
 
 import io.grpc.Server;
+import io.grpc.ServerInterceptors;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -18,15 +19,22 @@ public class GrpcServerLifecycle {
             LoggerFactory.getLogger(GrpcServerLifecycle.class);
 
     private final AccountGrpcServiceImpl accountGrpcService;
+
+    private final CorrelationIdServerInterceptor
+            correlationIdServerInterceptor;
+
     private final int grpcPort;
 
     private Server server;
 
     public GrpcServerLifecycle(
             AccountGrpcServiceImpl accountGrpcService,
+            CorrelationIdServerInterceptor correlationIdServerInterceptor,
             @Value("${app.grpc.server.port:9092}") int grpcPort
     ) {
         this.accountGrpcService = accountGrpcService;
+        this.correlationIdServerInterceptor =
+                correlationIdServerInterceptor;
         this.grpcPort = grpcPort;
     }
 
@@ -35,7 +43,14 @@ public class GrpcServerLifecycle {
 
         server = NettyServerBuilder
                 .forPort(grpcPort)
-                .addService(accountGrpcService)
+
+                .addService(
+                        ServerInterceptors.intercept(
+                                accountGrpcService,
+                                correlationIdServerInterceptor
+                        )
+                )
+
                 .build()
                 .start();
 
@@ -49,7 +64,11 @@ public class GrpcServerLifecycle {
     public void stop() {
 
         if (server != null) {
-            log.info("Shutting down Account gRPC server");
+
+            log.info(
+                    "Shutting down Account gRPC server"
+            );
+
             server.shutdown();
         }
     }

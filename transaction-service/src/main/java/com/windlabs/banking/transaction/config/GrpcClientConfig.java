@@ -7,6 +7,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.windlabs.banking.transaction.grpc.CorrelationIdClientInterceptor;
+
+import io.grpc.Channel;
+import io.grpc.ClientInterceptors;
+
 @Configuration
 public class GrpcClientConfig {
 
@@ -22,10 +27,23 @@ public class GrpcClientConfig {
     }
 
     @Bean
-    public AccountGrpcServiceGrpc.AccountGrpcServiceBlockingStub
-    accountGrpcStub(ManagedChannel accountGrpcChannel) {
+    public AccountGrpcServiceGrpc
+            .AccountGrpcServiceBlockingStub
+    accountGrpcStub(
+            ManagedChannel accountGrpcChannel,
+            CorrelationIdClientInterceptor
+                    correlationIdClientInterceptor
+    ) {
+
+        Channel channel =
+                ClientInterceptors.intercept(
+                        accountGrpcChannel,
+                        correlationIdClientInterceptor
+                );
 
         return AccountGrpcServiceGrpc
-                .newBlockingStub(accountGrpcChannel);
+                .newBlockingStub(
+                        channel
+                );
     }
 }
