@@ -36,6 +36,7 @@ public class TransferStateService {
             String customerId,
             String idempotencyKey,
             String requestHash,
+            String correlationId,
             CreateTransferRequest request
     ) {
 
@@ -85,6 +86,7 @@ public class TransferStateService {
                         customerId,
                         idempotencyKey,
                         requestHash,
+                        correlationId,
                         request.sourceAccountNumber(),
                         request.destinationAccountNumber(),
                         request.amount(),

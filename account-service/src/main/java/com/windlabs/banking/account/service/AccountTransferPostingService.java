@@ -3,26 +3,35 @@ package com.windlabs.banking.account.service;
 import com.windlabs.banking.account.entity.Account;
 import com.windlabs.banking.account.entity.AccountStatus;
 import com.windlabs.banking.account.entity.AccountTransfer;
+
 import com.windlabs.banking.account.repository.AccountRepository;
 import com.windlabs.banking.account.repository.AccountTransferRepository;
+
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+
 import java.nio.charset.StandardCharsets;
+
 import java.security.MessageDigest;
-import java.time.Instant;
+
 import java.util.HexFormat;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class AccountTransferPostingService {
 
     private final AccountRepository accountRepository;
-    private final AccountTransferRepository transferRepository;
+
+    private final AccountTransferRepository
+            transferRepository;
+
     private final JdbcTemplate jdbcTemplate;
 
     public AccountTransferPostingService(
@@ -30,9 +39,15 @@ public class AccountTransferPostingService {
             AccountTransferRepository transferRepository,
             JdbcTemplate jdbcTemplate
     ) {
-        this.accountRepository = accountRepository;
-        this.transferRepository = transferRepository;
-        this.jdbcTemplate = jdbcTemplate;
+
+        this.accountRepository =
+                accountRepository;
+
+        this.transferRepository =
+                transferRepository;
+
+        this.jdbcTemplate =
+                jdbcTemplate;
     }
 
     @Transactional
@@ -42,11 +57,22 @@ public class AccountTransferPostingService {
             String sourceAccountNumber,
             String destinationAccountNumber,
             BigDecimal requestedAmount,
-            String requestedCurrency
+            String requestedCurrency,
+            String correlationId
     ) {
 
-        String currency = normalizeCurrency(requestedCurrency);
-        BigDecimal amount = normalizeAmount(requestedAmount);
+        /*
+         * Normalisasi input.
+         */
+        String currency =
+                normalizeCurrency(
+                        requestedCurrency
+                );
+
+        BigDecimal amount =
+                normalizeAmount(
+                        requestedAmount
+                );
 
         validateRequest(
                 customerId,
@@ -55,147 +81,296 @@ public class AccountTransferPostingService {
                 destinationAccountNumber
         );
 
-        String requestHash = calculateRequestHash(
-                customerId,
-                sourceAccountNumber,
-                destinationAccountNumber,
-                amount,
-                currency
-        );
+        /*
+         * Fallback safety.
+         *
+         * Normal flow seharusnya correlation ID sudah berasal
+         * dari gRPC metadata melalui MDC.
+         */
+        if (correlationId == null
+                || correlationId.isBlank()) {
+
+            correlationId =
+                    UUID.randomUUID()
+                            .toString();
+        }
+
+        /*
+         * Hash ini hanya merepresentasikan data bisnis transfer.
+         *
+         * correlationId TIDAK boleh masuk hash karena retry
+         * dari request yang sama dapat memiliki tracing ID berbeda.
+         */
+        String requestHash =
+                calculateRequestHash(
+                        customerId,
+                        sourceAccountNumber,
+                        destinationAccountNumber,
+                        amount,
+                        currency
+                );
 
         /*
          * PostgreSQL transaction-scoped advisory lock.
          *
          * Request dengan customer + idempotency key yang sama
-         * diproses secara serial, bahkan jika datang bersamaan.
+         * akan diproses secara serial.
          */
         acquireIdempotencyLock(
-                customerId + ":" + idempotencyKey
+                customerId
+                        + ":"
+                        + idempotencyKey
         );
 
-        AccountTransfer existing = transferRepository
-                .findByCustomerIdAndIdempotencyKey(
-                        customerId,
-                        idempotencyKey
-                )
-                .orElse(null);
+        /*
+         * Cek apakah transfer ini sebelumnya sudah pernah
+         * berhasil diproses.
+         */
+        AccountTransfer existing =
+                transferRepository
+                        .findByCustomerIdAndIdempotencyKey(
+                                customerId,
+                                idempotencyKey
+                        )
+                        .orElse(null);
 
         if (existing != null) {
 
-            if (!existing.getRequestHash().equals(requestHash)) {
+            /*
+             * Idempotency key sama tetapi payload berbeda.
+             */
+            if (!existing
+                    .getRequestHash()
+                    .equals(requestHash)) {
+
                 throw new TransferPostingException(
-                        TransferPostingException.Code.IDEMPOTENCY_CONFLICT,
+                        TransferPostingException.Code
+                                .IDEMPOTENCY_CONFLICT,
                         "Idempotency key has already been used for a different transfer"
                 );
             }
 
-            return toResult(existing, true);
+            /*
+             * Jangan melakukan debit/credit lagi.
+             */
+            return toResult(
+                    existing,
+                    true
+            );
         }
 
+        /*
+         * Lock source dan destination account.
+         *
+         * Query repository menggunakan
+         * PESSIMISTIC_WRITE.
+         */
         List<Account> lockedAccounts =
-                accountRepository.findAllForUpdate(
-                        List.of(
-                                sourceAccountNumber,
-                                destinationAccountNumber
-                        )
-                );
+                accountRepository
+                        .findAllForUpdate(
+                                List.of(
+                                        sourceAccountNumber,
+                                        destinationAccountNumber
+                                )
+                        );
 
         if (lockedAccounts.size() != 2) {
+
             throw new TransferPostingException(
-                    TransferPostingException.Code.ACCOUNT_NOT_FOUND,
+                    TransferPostingException.Code
+                            .ACCOUNT_NOT_FOUND,
                     "Source or destination account not found"
             );
         }
 
-        Account source = lockedAccounts.stream()
-                .filter(a -> a.getAccountNumber()
-                        .equals(sourceAccountNumber))
-                .findFirst()
-                .orElseThrow();
+        Account source =
+                lockedAccounts
+                        .stream()
+                        .filter(
+                                account ->
+                                        account
+                                                .getAccountNumber()
+                                                .equals(
+                                                        sourceAccountNumber
+                                                )
+                        )
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new TransferPostingException(
+                                                TransferPostingException.Code
+                                                        .ACCOUNT_NOT_FOUND,
+                                                "Source account not found"
+                                        )
+                        );
 
-        Account destination = lockedAccounts.stream()
-                .filter(a -> a.getAccountNumber()
-                        .equals(destinationAccountNumber))
-                .findFirst()
-                .orElseThrow();
+        Account destination =
+                lockedAccounts
+                        .stream()
+                        .filter(
+                                account ->
+                                        account
+                                                .getAccountNumber()
+                                                .equals(
+                                                        destinationAccountNumber
+                                                )
+                        )
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new TransferPostingException(
+                                                TransferPostingException.Code
+                                                        .ACCOUNT_NOT_FOUND,
+                                                "Destination account not found"
+                                        )
+                        );
 
-        if (!source.getCustomer()
+        /*
+         * Source account harus milik authenticated customer.
+         */
+        if (!source
+                .getCustomer()
                 .getCustomerId()
                 .equals(customerId)) {
 
             throw new TransferPostingException(
-                    TransferPostingException.Code.SOURCE_ACCOUNT_NOT_OWNED,
+                    TransferPostingException.Code
+                            .SOURCE_ACCOUNT_NOT_OWNED,
                     "Source account does not belong to customer"
             );
         }
 
-        if (source.getStatus() != AccountStatus.ACTIVE
-                || destination.getStatus() != AccountStatus.ACTIVE) {
+        /*
+         * Kedua rekening harus ACTIVE.
+         */
+        if (source.getStatus()
+                != AccountStatus.ACTIVE
+                ||
+                destination.getStatus()
+                        != AccountStatus.ACTIVE) {
 
             throw new TransferPostingException(
-                    TransferPostingException.Code.ACCOUNT_NOT_ACTIVE,
+                    TransferPostingException.Code
+                            .ACCOUNT_NOT_ACTIVE,
                     "Source and destination accounts must be active"
             );
         }
 
-        if (!source.getCurrency().equalsIgnoreCase(currency)
-                || !destination.getCurrency().equalsIgnoreCase(currency)) {
+        /*
+         * Currency request harus sama dengan currency
+         * kedua rekening.
+         */
+        if (!source
+                .getCurrency()
+                .equalsIgnoreCase(currency)
+                ||
+                !destination
+                        .getCurrency()
+                        .equalsIgnoreCase(currency)) {
 
             throw new TransferPostingException(
-                    TransferPostingException.Code.CURRENCY_MISMATCH,
+                    TransferPostingException.Code
+                            .CURRENCY_MISMATCH,
                     "Account currency does not match transfer currency"
             );
         }
 
-        if (source.getBalance().compareTo(amount) < 0) {
+        /*
+         * Pastikan saldo source cukup.
+         */
+        if (source
+                .getBalance()
+                .compareTo(amount) < 0) {
+
             throw new TransferPostingException(
-                    TransferPostingException.Code.INSUFFICIENT_BALANCE,
+                    TransferPostingException.Code
+                            .INSUFFICIENT_BALANCE,
                     "Insufficient balance"
             );
         }
 
         /*
-         * Dua perubahan berada dalam SATU database transaction.
+         * =====================================================
+         * ATOMIC POSTING
+         * =====================================================
+         *
+         * Semua operasi berikut berada di SATU database
+         * transaction karena method memakai @Transactional.
          */
-        source.debit(amount);
-        destination.credit(amount);
 
-        AccountTransfer transfer = new AccountTransfer(
-                customerId,
-                idempotencyKey,
-                requestHash,
-                sourceAccountNumber,
-                destinationAccountNumber,
-                amount,
-                currency,
-                source.getBalance(),
-                destination.getBalance()
+        source.debit(
+                amount
         );
 
-        transferRepository.save(transfer);
+        destination.credit(
+                amount
+        );
 
         /*
-         * Hibernate akan melakukan UPDATE accounts +
-         * INSERT account_transfers pada commit transaction yang sama.
+         * Simpan proof / posting record.
+         *
+         * correlationId ikut disimpan agar Debezium CDC
+         * nantinya dapat menghubungkan perubahan database
+         * dengan request asal.
+         */
+        AccountTransfer transfer =
+                new AccountTransfer(
+                        customerId,
+                        idempotencyKey,
+                        requestHash,
+                        sourceAccountNumber,
+                        destinationAccountNumber,
+                        amount,
+                        currency,
+                        source.getBalance(),
+                        destination.getBalance(),
+                        correlationId
+                );
+
+        transferRepository.save(
+                transfer
+        );
+
+        /*
+         * Pada commit:
+         *
+         * UPDATE accounts       source
+         * UPDATE accounts       destination
+         * INSERT account_transfers
+         *
+         * semuanya atomic.
          */
 
-        return toResult(transfer, false);
+        return toResult(
+                transfer,
+                false
+        );
     }
 
-    private void acquireIdempotencyLock(String lockKey) {
+    private void acquireIdempotencyLock(
+            String lockKey
+    ) {
 
         jdbcTemplate.execute(
                 (ConnectionCallback<Void>) connection -> {
 
-                    try (var statement = connection.prepareStatement(
-                            """
-                            SELECT pg_advisory_xact_lock(
-                                hashtextextended(?, 0)
-                            )
-                            """
-                    )) {
+                    try (
+                            var statement =
+                                    connection
+                                            .prepareStatement(
+                                                    """
+                                                    SELECT pg_advisory_xact_lock(
+                                                        hashtextextended(?, 0)
+                                                    )
+                                                    """
+                                            )
+                    ) {
 
-                        statement.setString(1, lockKey);
+                        statement.setString(
+                                1,
+                                lockKey
+                        );
+
                         statement.execute();
                     }
 
@@ -211,43 +386,71 @@ public class AccountTransferPostingService {
             String destinationAccountNumber
     ) {
 
-        if (customerId == null || customerId.isBlank()) {
-            invalid("Customer id is required");
+        if (customerId == null
+                || customerId.isBlank()) {
+
+            invalid(
+                    "Customer id is required"
+            );
         }
 
         if (idempotencyKey == null
                 || idempotencyKey.isBlank()
                 || idempotencyKey.length() > 128) {
 
-            invalid("Valid idempotency key is required");
+            invalid(
+                    "Valid idempotency key is required"
+            );
         }
 
         if (sourceAccountNumber == null
                 || sourceAccountNumber.isBlank()) {
-            invalid("Source account is required");
+
+            invalid(
+                    "Source account is required"
+            );
         }
 
         if (destinationAccountNumber == null
                 || destinationAccountNumber.isBlank()) {
-            invalid("Destination account is required");
+
+            invalid(
+                    "Destination account is required"
+            );
         }
 
-        if (sourceAccountNumber.equals(destinationAccountNumber)) {
+        if (sourceAccountNumber
+                .equals(
+                        destinationAccountNumber
+                )) {
+
             invalid(
                     "Source and destination accounts must be different"
             );
         }
     }
 
-    private BigDecimal normalizeAmount(BigDecimal amount) {
+    private BigDecimal normalizeAmount(
+            BigDecimal amount
+    ) {
 
-        if (amount == null || amount.signum() <= 0) {
-            invalid("Transfer amount must be greater than zero");
+        if (amount == null
+                || amount.signum() <= 0) {
+
+            invalid(
+                    "Transfer amount must be greater than zero"
+            );
         }
 
         try {
-            return amount.setScale(2, RoundingMode.UNNECESSARY);
+
+            return amount.setScale(
+                    2,
+                    RoundingMode.UNNECESSARY
+            );
+
         } catch (ArithmeticException ex) {
+
             invalid(
                     "Transfer amount supports at most 2 decimal places"
             );
@@ -256,18 +459,28 @@ public class AccountTransferPostingService {
         }
     }
 
-    private String normalizeCurrency(String currency) {
+    private String normalizeCurrency(
+            String currency
+    ) {
 
-        if (currency == null || currency.isBlank()) {
-            invalid("Currency is required");
+        if (currency == null
+                || currency.isBlank()) {
+
+            invalid(
+                    "Currency is required"
+            );
         }
 
-        String normalized = currency
-                .trim()
-                .toUpperCase();
+        String normalized =
+                currency
+                        .trim()
+                        .toUpperCase();
 
         if (normalized.length() != 3) {
-            invalid("Currency must contain 3 characters");
+
+            invalid(
+                    "Currency must contain 3 characters"
+            );
         }
 
         return normalized;
@@ -283,25 +496,35 @@ public class AccountTransferPostingService {
 
         try {
 
-            String canonical = String.join(
-                    "|",
-                    customerId,
-                    source,
-                    destination,
-                    amount.toPlainString(),
-                    currency
-            );
+            String canonical =
+                    String.join(
+                            "|",
+                            customerId,
+                            source,
+                            destination,
+                            amount.toPlainString(),
+                            currency
+                    );
 
             MessageDigest digest =
-                    MessageDigest.getInstance("SHA-256");
+                    MessageDigest
+                            .getInstance(
+                                    "SHA-256"
+                            );
 
-            byte[] hash = digest.digest(
-                    canonical.getBytes(StandardCharsets.UTF_8)
-            );
+            byte[] hash =
+                    digest.digest(
+                            canonical.getBytes(
+                                    StandardCharsets.UTF_8
+                            )
+                    );
 
-            return HexFormat.of().formatHex(hash);
+            return HexFormat
+                    .of()
+                    .formatHex(hash);
 
         } catch (Exception ex) {
+
             throw new IllegalStateException(
                     "Unable to calculate transfer request hash",
                     ex
@@ -327,9 +550,13 @@ public class AccountTransferPostingService {
         );
     }
 
-    private void invalid(String message) {
+    private void invalid(
+            String message
+    ) {
+
         throw new TransferPostingException(
-                TransferPostingException.Code.INVALID_REQUEST,
+                TransferPostingException.Code
+                        .INVALID_REQUEST,
                 message
         );
     }

@@ -14,6 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+
+import java.util.UUID;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -59,6 +62,12 @@ public class TransferService {
             String idempotencyKey,
             CreateTransferRequest rawRequest
     ) {
+
+        String correlationId = MDC.get("correlationId");
+
+        if (correlationId == null || correlationId.isBlank()) {
+            correlationId = UUID.randomUUID().toString();
+        }
 
         if (idempotencyKey == null
                 || idempotencyKey.isBlank()
@@ -116,6 +125,7 @@ public class TransferService {
                         customerId,
                         idempotencyKey,
                         requestHash,
+                        correlationId,
                         request
                 );
 

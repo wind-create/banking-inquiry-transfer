@@ -4,17 +4,21 @@ import com.windlabs.banking.account.repository.AccountRepository;
 import com.windlabs.banking.account.service.AccountTransferPostingService;
 import com.windlabs.banking.account.service.TransferPostingException;
 import com.windlabs.banking.account.service.TransferPostingResult;
+
 import com.windlabs.banking.grpc.account.AccountGrpcServiceGrpc;
 import com.windlabs.banking.grpc.account.ExecuteTransferRequest;
 import com.windlabs.banking.grpc.account.ExecuteTransferResponse;
-import com.windlabs.banking.account.repository.AccountRepository;
 import com.windlabs.banking.grpc.account.ValidateOwnershipRequest;
 import com.windlabs.banking.grpc.account.ValidateOwnershipResponse;
+
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Service
 public class AccountGrpcServiceImpl
@@ -36,18 +40,20 @@ public class AccountGrpcServiceImpl
             ValidateOwnershipRequest request,
             StreamObserver<ValidateOwnershipResponse> responseObserver
     ) {
-    
+
         boolean valid =
-                accountRepository.existsByAccountNumberAndCustomer_CustomerId(
-                        request.getAccountNumber(),
-                        request.getCustomerId()
-                );
-    
+                accountRepository
+                        .existsByAccountNumberAndCustomer_CustomerId(
+                                request.getAccountNumber(),
+                                request.getCustomerId()
+                        );
+
         ValidateOwnershipResponse response =
-                ValidateOwnershipResponse.newBuilder()
+                ValidateOwnershipResponse
+                        .newBuilder()
                         .setValid(valid)
                         .build();
-    
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
@@ -60,43 +66,85 @@ public class AccountGrpcServiceImpl
 
         try {
 
+            /*
+             * Correlation ID sudah dimasukkan ke MDC oleh
+             * CorrelationIdServerInterceptor.
+             */
+            String correlationId =
+                    MDC.get("correlationId");
+
+            /*
+             * Fallback safety.
+             */
+            if (correlationId == null
+                    || correlationId.isBlank()) {
+
+                correlationId =
+                        UUID.randomUUID()
+                                .toString();
+            }
+
+            BigDecimal amount =
+                    new BigDecimal(
+                            request.getAmount()
+                    );
+
             TransferPostingResult result =
                     transferService.execute(
                             request.getCustomerId(),
                             request.getIdempotencyKey(),
                             request.getSourceAccountNumber(),
                             request.getDestinationAccountNumber(),
-                            new BigDecimal(request.getAmount()),
-                            request.getCurrency()
+                            amount,
+                            request.getCurrency(),
+                            correlationId
                     );
 
             ExecuteTransferResponse response =
-                    ExecuteTransferResponse.newBuilder()
+                    ExecuteTransferResponse
+                            .newBuilder()
+
                             .setTransferId(
-                                    result.transferId().toString()
+                                    result.transferId()
+                                            .toString()
                             )
+
                             .setSourceAccountNumber(
                                     result.sourceAccountNumber()
                             )
+
                             .setDestinationAccountNumber(
                                     result.destinationAccountNumber()
                             )
+
                             .setAmount(
-                                    result.amount().toPlainString()
+                                    result.amount()
+                                            .toPlainString()
                             )
-                            .setCurrency(result.currency())
+
+                            .setCurrency(
+                                    result.currency()
+                            )
+
                             .setSourceBalanceAfter(
                                     result.sourceBalanceAfter()
                                             .toPlainString()
                             )
+
                             .setDestinationBalanceAfter(
                                     result.destinationBalanceAfter()
                                             .toPlainString()
                             )
+
                             .setProcessedOn(
-                                    result.processedOn().toString()
+                                    result.processedOn()
+                                            .toString()
                             )
-                            .setReplayed(result.replayed())
+
+                            .setReplayed(
+                                    result.replayed()
+                            )
+
                             .build();
 
             responseObserver.onNext(response);
@@ -106,7 +154,9 @@ public class AccountGrpcServiceImpl
 
             responseObserver.onError(
                     Status.INVALID_ARGUMENT
-                            .withDescription("Invalid amount")
+                            .withDescription(
+                                    "Invalid amount"
+                            )
                             .asRuntimeException()
             );
 
@@ -114,7 +164,9 @@ public class AccountGrpcServiceImpl
 
             responseObserver.onError(
                     mapStatus(ex)
-                            .withDescription(ex.getMessage())
+                            .withDescription(
+                                    ex.getMessage()
+                            )
                             .asRuntimeException()
             );
 
@@ -125,6 +177,7 @@ public class AccountGrpcServiceImpl
                             .withDescription(
                                     "Internal transfer processing error"
                             )
+                            .withCause(ex)
                             .asRuntimeException()
             );
         }

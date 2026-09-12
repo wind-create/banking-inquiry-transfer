@@ -49,6 +49,12 @@ public class AccountTransfer extends BaseAuditEntity {
     private String idempotencyKey;
 
     @Column(
+            name = "correlation_id",
+            length = 128
+    )
+    private String correlationId;
+
+    @Column(
             name = "request_hash",
             nullable = false,
             length = 64
@@ -108,11 +114,13 @@ public class AccountTransfer extends BaseAuditEntity {
             BigDecimal amount,
             String currency,
             BigDecimal sourceBalanceAfter,
-            BigDecimal destinationBalanceAfter
+            BigDecimal destinationBalanceAfter,
+            String correlationId
     ) {
         this.transferId = UUID.randomUUID();
         this.customerId = customerId;
         this.idempotencyKey = idempotencyKey;
+        this.correlationId = correlationId;
         this.requestHash = requestHash;
         this.sourceAccountNumber = sourceAccountNumber;
         this.destinationAccountNumber = destinationAccountNumber;

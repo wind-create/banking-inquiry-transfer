@@ -35,6 +35,9 @@ public class TransferRequestEntity extends BaseAuditEntity {
 
     @Column(name = "idempotency_key", nullable = false, length = 128)
     private String idempotencyKey;
+    
+    @Column(name = "correlation_id", length = 128)
+    private String correlationId;
 
     @Column(name = "request_hash", nullable = false, length = 64)
     private String requestHash;
@@ -89,6 +92,7 @@ public class TransferRequestEntity extends BaseAuditEntity {
             String customerId,
             String idempotencyKey,
             String requestHash,
+            String correlationId,
             String sourceAccountNumber,
             String destinationAccountNumber,
             BigDecimal amount,
@@ -97,6 +101,7 @@ public class TransferRequestEntity extends BaseAuditEntity {
         this.customerId = customerId;
         this.idempotencyKey = idempotencyKey;
         this.requestHash = requestHash;
+        this.correlationId = correlationId;
         this.sourceAccountNumber = sourceAccountNumber;
         this.destinationAccountNumber = destinationAccountNumber;
         this.amount = amount;
