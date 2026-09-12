@@ -43,6 +43,13 @@ public class SecurityConfig {
                                 "SCOPE_transfer.write"
                         )
 
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/accounts/*/transactions"
+                        ).hasAuthority(
+                                "SCOPE_transaction.read"
+                        )
+
                         .anyRequest().authenticated()
                 )
 

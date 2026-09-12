@@ -1,11 +1,15 @@
 package com.windlabs.banking.account.grpc;
 
+import com.windlabs.banking.account.repository.AccountRepository;
 import com.windlabs.banking.account.service.AccountTransferPostingService;
 import com.windlabs.banking.account.service.TransferPostingException;
 import com.windlabs.banking.account.service.TransferPostingResult;
 import com.windlabs.banking.grpc.account.AccountGrpcServiceGrpc;
 import com.windlabs.banking.grpc.account.ExecuteTransferRequest;
 import com.windlabs.banking.grpc.account.ExecuteTransferResponse;
+import com.windlabs.banking.account.repository.AccountRepository;
+import com.windlabs.banking.grpc.account.ValidateOwnershipRequest;
+import com.windlabs.banking.grpc.account.ValidateOwnershipResponse;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import org.springframework.stereotype.Service;
@@ -17,11 +21,35 @@ public class AccountGrpcServiceImpl
         extends AccountGrpcServiceGrpc.AccountGrpcServiceImplBase {
 
     private final AccountTransferPostingService transferService;
+    private final AccountRepository accountRepository;
 
     public AccountGrpcServiceImpl(
-            AccountTransferPostingService transferService
+            AccountTransferPostingService transferService,
+            AccountRepository accountRepository
     ) {
         this.transferService = transferService;
+        this.accountRepository = accountRepository;
+    }
+
+    @Override
+    public void validateOwnership(
+            ValidateOwnershipRequest request,
+            StreamObserver<ValidateOwnershipResponse> responseObserver
+    ) {
+    
+        boolean valid =
+                accountRepository.existsByAccountNumberAndCustomer_CustomerId(
+                        request.getAccountNumber(),
+                        request.getCustomerId()
+                );
+    
+        ValidateOwnershipResponse response =
+                ValidateOwnershipResponse.newBuilder()
+                        .setValid(valid)
+                        .build();
+    
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
     }
 
     @Override

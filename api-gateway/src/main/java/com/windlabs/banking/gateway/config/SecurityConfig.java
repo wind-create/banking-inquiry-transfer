@@ -26,15 +26,24 @@ public class SecurityConfig {
 
                         .pathMatchers(
                                 HttpMethod.GET,
-                                "/api/v1/customers/**",
-                                "/api/v1/accounts/**"
-                        ).hasAuthority("SCOPE_account.read")
+                                "/api/v1/accounts/*/transactions"
+                        ).hasAuthority(
+                                "SCOPE_transaction.read"
+                        )
 
                         .pathMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/transfers",
                                 "/api/v1/transfers/**"
                         ).hasAuthority("SCOPE_transfer.write")
+
+                        .pathMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/customers/**",
+                                "/api/v1/accounts/**"
+                        ).hasAuthority("SCOPE_account.read")
+
+                        
 
                         .anyExchange().denyAll()
                 )
