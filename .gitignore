@@ -40,3 +40,4 @@ local-secrets/
 **/local-secrets/
 
 k8s/secret.yaml
+local-secrets/
