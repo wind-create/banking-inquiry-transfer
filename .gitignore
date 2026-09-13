@@ -38,3 +38,5 @@ docker/data/
 
 local-secrets/
 **/local-secrets/
+
+k8s/secret.yaml
