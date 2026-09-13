@@ -47,3 +47,5 @@ docker-images/
 *.tar
 *.tar.gz
 *.tgz
+
+k8s-export/
