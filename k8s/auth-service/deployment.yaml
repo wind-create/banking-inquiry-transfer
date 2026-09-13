@@ -13,19 +13,15 @@ spec:
       app: auth-service
 
   template:
-
     metadata:
       labels:
         app: auth-service
 
     spec:
-
       containers:
-
         - name: auth-service
 
           image: banking-auth-service:1.0.0
-
           imagePullPolicy: IfNotPresent
 
           ports:
@@ -35,8 +31,23 @@ spec:
 
           env:
 
+            # =========================
+            # Spring
+            # =========================
+
+            - name: SPRING_PROFILES_ACTIVE
+              value: "dev"
+
             - name: SERVER_PORT
               value: "8081"
+
+            # Bind ke semua network interface container
+            - name: SERVER_ADDRESS
+              value: "0.0.0.0"
+
+            # =========================
+            # PostgreSQL
+            # =========================
 
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres:5432/auth_db
@@ -53,30 +64,85 @@ spec:
                   name: banking-secret
                   key: DB_PASSWORD
 
-          readinessProbe:
+            # =========================
+            # JWT PKCS12
+            # =========================
 
+            - name: JWT_KEYSTORE_LOCATION
+              value: file:/app/secrets/banking-jwt.p12
+
+            - name: JWT_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-jwt-config
+                  key: JWT_KEYSTORE_PASSWORD
+
+            # =========================
+            # Demo Users
+            # =========================
+
+            - name: DEMO_CUSTOMER_ONE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-demo-users
+                  key: DEMO_CUSTOMER_ONE_PASSWORD
+
+            - name: DEMO_CUSTOMER_TWO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-demo-users
+                  key: DEMO_CUSTOMER_TWO_PASSWORD
+
+          volumeMounts:
+            - name: jwt-keystore
+              mountPath: /app/secrets
+              readOnly: true
+
+          # =========================
+          # Startup Probe
+          # =========================
+
+          startupProbe:
             httpGet:
               path: /actuator/health
               port: 8081
 
-            initialDelaySeconds: 15
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+
+          # =========================
+          # Readiness Probe
+          # =========================
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 12
+            failureThreshold: 6
+
+          # =========================
+          # Liveness Probe
+          # =========================
 
           livenessProbe:
-
             httpGet:
               path: /actuator/health
               port: 8081
 
-            initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 6
 
-          resources:
+          # =========================
+          # Resources
+          # =========================
 
+          resources:
             requests:
               cpu: 100m
               memory: 256Mi
@@ -84,3 +150,8 @@ spec:
             limits:
               cpu: "1"
               memory: 768Mi
+
+      volumes:
+        - name: jwt-keystore
+          secret:
+            secretName: auth-signing-key
