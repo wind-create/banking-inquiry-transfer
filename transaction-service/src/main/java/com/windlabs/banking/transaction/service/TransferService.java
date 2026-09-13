@@ -259,6 +259,20 @@ public class TransferService {
 
             log.atError()
                 .addKeyValue(
+                        "grpcStatus",
+                        ex.getStatus().getCode().name()
+                )
+                .addKeyValue(
+                        "grpcDescription",
+                        ex.getStatus().getDescription()
+                )
+                .setCause(ex)
+                .log(
+                        "Account service gRPC call failed"
+                );
+
+            log.atError()
+                .addKeyValue(
                         "customerId",
                         customerId
                 )
