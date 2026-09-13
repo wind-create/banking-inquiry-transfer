@@ -4,6 +4,8 @@ Secure banking backend berbasis **Java 21 + Spring Boot 4 + Kubernetes** untuk k
 
 ---
 
+url video :  https://drive.google.com/file/d/1PHY3YhKFuZTpTbvZBd7IS0lhD9YBgqyo/view?usp=sharing
+
 ## 1. Fitur Utama
 
 - Inquiry account berdasarkan `customerId`
@@ -935,4 +937,11 @@ Urutan demo yang direkomendasikan:
 13. Rate limit -> request ke-6 = 429
 ```
 
----
+
+kubectl exec `
+  -n banking `
+  postgres-0 `
+  -- psql `
+  -U banking_admin `
+  -d audit_db `
+  -c "SELECT source_service, table_name, operation, record_id, correlation_id, occurred_at FROM audit_events WHERE correlation_id = 'postman-flow-001' ORDER BY occurred_at;"
