@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: api-gateway
+  namespace: banking
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: api-gateway
+
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+
+    spec:
+      containers:
+        - name: api-gateway
+
+          image: banking-api-gateway:1.0.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          env:
+
+            # =========================
+            # Spring
+            # =========================
+
+            - name: SERVER_PORT
+              value: "8080"
+
+            - name: SERVER_ADDRESS
+              value: "0.0.0.0"
+
+            # =========================
+            # OAuth2 / JWT
+            # =========================
+
+            # Harus sama dengan claim "iss"
+            # token dari auth-service
+            - name: OAUTH2_ISSUER_URI
+              value: "http://localhost:8081"
+
+            # JWK diambil melalui DNS internal Kubernetes
+            - name: OAUTH2_JWK_SET_URI
+              value: "http://auth-service:8081/oauth2/jwks"
+
+            # =========================
+            # Redis
+            # =========================
+
+            - name: REDIS_HOST
+              value: "redis"
+
+            - name: REDIS_PORT
+              value: "6379"
+
+            # =========================
+            # Rate Limit
+            # =========================
+
+            - name: APP_RATE_LIMIT_MAX_REQUESTS
+              value: "5"
+
+            - name: APP_RATE_LIMIT_WINDOW
+              value: "5m"
+
+            # =========================
+            # Downstream Services
+            # =========================
+
+            - name: ACCOUNT_SERVICE_URL
+              value: "http://account-service:8082"
+
+            - name: TRANSACTION_SERVICE_URL
+              value: "http://transaction-service:8083"
+
+          # =========================
+          # Startup Probe
+          # =========================
+
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+
+          # =========================
+          # Readiness Probe
+          # =========================
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          # =========================
+          # Liveness Probe
+          # =========================
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          # =========================
+          # Resources
+          # =========================
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+            limits:
+              cpu: "1"
+              memory: 768Mi
