@@ -41,3 +41,9 @@ local-secrets/
 
 k8s/secret.yaml
 local-secrets/
+
+
+docker-images/
+*.tar
+*.tar.gz
+*.tgz

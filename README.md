@@ -6,6 +6,21 @@ Secure banking backend berbasis **Java 21 + Spring Boot 4 + Kubernetes** untuk k
 
 url video :  https://drive.google.com/file/d/1PHY3YhKFuZTpTbvZBd7IS0lhD9YBgqyo/view?usp=sharing
 
+untuk load file docker image pakai command 
+```text
+
+docker load `
+  -i .\docker-images\banking-services-1.0.0.tar
+
+```
+lalu 
+
+```text
+
+docker images | Select-String "banking-"
+
+```
+
 ## 1. Fitur Utama
 
 - Inquiry account berdasarkan `customerId`
