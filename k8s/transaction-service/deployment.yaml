@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: transaction-service
+  namespace: banking
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: transaction-service
+
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+
+    spec:
+      containers:
+        - name: transaction-service
+
+          image: banking-transaction-service:1.0.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8083
+              protocol: TCP
+
+          env:
+
+            # =========================
+            # Spring
+            # =========================
+
+            - name: SPRING_PROFILES_ACTIVE
+              value: "dev"
+
+            - name: SERVER_PORT
+              value: "8083"
+
+            - name: SERVER_ADDRESS
+              value: "0.0.0.0"
+
+            # =========================
+            # PostgreSQL
+            # =========================
+
+            - name: DB_HOST
+              value: "postgres"
+
+            - name: DB_PORT
+              value: "5432"
+
+            - name: DB_NAME
+              value: "transaction_db"
+
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: banking-secret
+                  key: DB_USERNAME
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: banking-secret
+                  key: DB_PASSWORD
+
+            # =========================
+            # OAuth2 / JWT
+            # =========================
+
+            - name: OAUTH2_ISSUER_URI
+              value: "http://localhost:8081"
+
+            - name: OAUTH2_JWK_SET_URI
+              value: "http://auth-service:8081/oauth2/jwks"
+
+            # =========================
+            # Redis
+            # =========================
+
+            - name: REDIS_HOST
+              value: "redis"
+
+            - name: REDIS_PORT
+              value: "6379"
+
+            # =========================
+            # Account Service gRPC
+            # =========================
+
+            - name: ACCOUNT_GRPC_HOST
+              value: "account-service"
+
+            - name: ACCOUNT_GRPC_PORT
+              value: "9092"
+
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+            limits:
+              cpu: "1"
+              memory: 768Mi
