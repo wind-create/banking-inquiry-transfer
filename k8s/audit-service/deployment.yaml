@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: audit-service
+  namespace: banking
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: audit-service
+
+  template:
+    metadata:
+      labels:
+        app: audit-service
+
+    spec:
+      containers:
+        - name: audit-service
+
+          image: banking-audit-service:1.0.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8085
+              protocol: TCP
+
+          env:
+
+            # =========================
+            # Spring
+            # =========================
+
+            - name: SERVER_PORT
+              value: "8085"
+
+            - name: SERVER_ADDRESS
+              value: "0.0.0.0"
+
+            # =========================
+            # PostgreSQL / audit_db
+            # =========================
+
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/audit_db
+
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: banking-secret
+                  key: DB_USERNAME
+
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: banking-secret
+                  key: DB_PASSWORD
+
+            # =========================
+            # Kafka
+            # =========================
+
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka:9092"
+
+            - name: SPRING_KAFKA_CONSUMER_GROUP_ID
+              value: "banking-audit-service"
+
+            - name: SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET
+              value: "earliest"
+
+            - name: SPRING_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT
+              value: "false"
+
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+            limits:
+              cpu: "1"
+              memory: 768Mi
