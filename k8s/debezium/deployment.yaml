@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: debezium
+  namespace: banking
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: debezium
+
+  template:
+
+    metadata:
+      labels:
+        app: debezium
+
+    spec:
+
+      containers:
+
+        - name: debezium
+
+          image: quay.io/debezium/connect:3.0
+
+          imagePullPolicy: IfNotPresent
+
+          ports:
+
+            - name: http
+              containerPort: 8083
+              protocol: TCP
+
+          env:
+
+            - name: BOOTSTRAP_SERVERS
+              value: kafka:9092
+
+            - name: GROUP_ID
+              value: banking-debezium-connect-v2
+
+            - name: CONFIG_STORAGE_TOPIC
+              value: banking_connect_configs_v2
+
+            - name: OFFSET_STORAGE_TOPIC
+              value: banking_connect_offsets_v2
+
+            - name: STATUS_STORAGE_TOPIC
+              value: banking_connect_statuses_v2
+
+            - name: CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "1"
+
+            - name: OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "1"
+
+            - name: STATUS_STORAGE_REPLICATION_FACTOR
+              value: "1"
+
+          readinessProbe:
+
+            httpGet:
+              path: /
+              port: 8083
+
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+
+          livenessProbe:
+
+            httpGet:
+              path: /
+              port: 8083
+
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          resources:
+
+            requests:
+              cpu: 200m
+              memory: 512Mi
+
+            limits:
+              cpu: "1"
+              memory: 1Gi
